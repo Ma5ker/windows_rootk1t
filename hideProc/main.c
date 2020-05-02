@@ -8,9 +8,6 @@
 #include <ntddk.h>
 #include <windef.h>
 
-LARGE_INTEGER timeHiddenUser;
-LARGE_INTEGER timeHidderKernel;
-
 
 
 typedef enum _SYSTEM_INFORMATION_CLASS {
