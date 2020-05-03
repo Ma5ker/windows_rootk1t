@@ -11,18 +11,15 @@
 
 //存放原函数地址
 PVOID oldZwQuerySystemInformation;
-
 //存放原函数索引
 ULONG ulSSDTFunctionIndex = 0;
-
-
 //SSDT
 DWORD *SSDTcallTable;
 
 
 typedef enum _SYSTEM_INFORMATION_CLASS {
 
-	SystemProcessInformation = 5,
+	SystemProcessInformation = 5,//此时对应SystemInformation存放的是进程信息
 	SystemProcessorPerformanceInformation = 8
 }SYSTEM_INFORMATION_CLASS;
 
@@ -55,13 +52,6 @@ typedef struct _SYSTEM_PROCESS_INFO {
 	LARGE_INTEGER Reserved6[6];
 }SYSTEM_PROCESS_INFO,*PSYSTEM_PROCESS_INFO;
 
-typedef struct _SYSTEM_PROCESSOR_PERFORMANCE_INFO {
-	LARGE_INTEGER IdleTime;
-	LARGE_INTEGER KernelTime;
-	LARGE_INTEGER UserTime;
-	LARGE_INTEGER Reserved1[2];
-	ULONG Reserved2;
-}SYSTEM_PROCESSOR_PERFORMANCE_INFO,*PSYSTEM_PROCESSOR_PERFORMANCE_INFO;
 
 //判断是否该隐藏此进程  1表示需要隐藏  0 表示不需要隐藏
 //可添加隐藏进程
@@ -124,9 +114,8 @@ NTSTATUS newZwQuerySystemInformation(
 					}
 				}
 			}
-
 		}
-		//继续处理遍历下一个进程信息
+		//继续处理遍历下一个进程结构体信息
 		pSPI = cSPI;
 		if ((*cSPI).NextEntryOffset != 0) {
 			(BYTE*)cSPI = ((BYTE*)cSPI) + (*cSPI).NextEntryOffset;
@@ -291,14 +280,13 @@ ULONG GetSSDTFunctionIndex(UNICODE_STRING ustrDllFileName, PCHAR pszFunctionName
 }
 
 
-//  hook SSDT项
+//  hook SSDT对应项
 BYTE* hookSSDT(ULONG index,BYTE* newAddr,DWORD *callTable) {
 	PLONG target;
 	target = (PLONG) & (callTable[index]);
 	return ((BYTE*)InterlockedExchange(target, (LONG)newAddr));
 }
 
-//和hook基本差不多
 VOID unhookSSDT(ULONG index,BYTE* oldAddr,DWORD* callTable) {
 	PLONG target;
 	target = (PLONG) & (callTable[index]);
