@@ -52,7 +52,7 @@ void HideDriver(IN PDRIVER_OBJECT DriverObject) {
 	//×ÔÑ­»·
 	cur_section->InLoadOrderLinks.Flink = (PLIST_ENTRY)cur_section;
 	cur_section->InLoadOrderLinks.Blink = (PLIST_ENTRY)cur_section;
-
+	DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_WARNING_LEVEL, "hide driver\n");
 	KeLowerIrql(irql);
 }
 

