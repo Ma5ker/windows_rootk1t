@@ -2,7 +2,8 @@
  * 展示部分
  * 隐藏进程demo，
  * 通过hook SSDT方式实现
- * 对ZwQuerySystemInformation()系统调用进行hook
+ * 对ZwQuerySystemInformation()进行hook？
+ *真正hook的是NtQuerySystemInformation()
  */
 
 #include <ntddk.h>
@@ -10,7 +11,7 @@
 #include <ntimage.h>
 
 //存放原函数地址
-PVOID oldZwQuerySystemInformation;
+PVOID oldNtQuerySystemInformation;
 //存放原函数索引
 ULONG ulSSDTFunctionIndex = 0;
 //SSDT
@@ -24,7 +25,7 @@ typedef enum _SYSTEM_INFORMATION_CLASS {
 }SYSTEM_INFORMATION_CLASS;
 
 
-typedef NTSTATUS (*ZwQuerySystemInformationPtr)(
+typedef NTSTATUS (*NtQuerySystemInformationPtr)(
 	IN SYSTEM_INFORMATION_CLASS SystemInformationClass,
 	IN PVOID SystemInformation,
 	IN ULONG SystemInformationLength,
@@ -63,7 +64,7 @@ int shouldHide(PSYSTEM_PROCESS_INFO systeminfo) {
 }
 
 //替换函数
-NTSTATUS newZwQuerySystemInformation(
+NTSTATUS newNtQuerySystemInformation(
 	IN ULONG SystemInformationClass,
 	IN PVOID SystemInformation,
 	IN ULONG SystemInformationLength,
@@ -73,7 +74,7 @@ NTSTATUS newZwQuerySystemInformation(
 	PSYSTEM_PROCESS_INFO cSPI;//当前进程信息
 	PSYSTEM_PROCESS_INFO pSPI;//上一个结构体
 
-	ntStatus = ((ZwQuerySystemInformationPtr)(oldZwQuerySystemInformation))(
+	ntStatus = ((NtQuerySystemInformationPtr)(oldNtQuerySystemInformation))(
 		SystemInformationClass,
 		SystemInformation,
 		SystemInformationLength,
@@ -357,7 +358,7 @@ VOID Unload(IN PDRIVER_OBJECT DriverObject) {
 	//KdBreakPoint();
 	DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_WARNING_LEVEL, "Driver unLoaded.\n");
 	disableWP_cr0();
-	unhookSSDT(ulSSDTFunctionIndex, oldZwQuerySystemInformation, SSDTcallTable);
+	unhookSSDT(ulSSDTFunctionIndex, oldNtQuerySystemInformation, SSDTcallTable);
 	enableWP_cr0();
 	return;
 }
@@ -378,9 +379,9 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING regPath)
 	ulSSDTFunctionIndex = GetSSDTFunctionIndex(ustrDllFileName, "ZwQuerySystemInformation");
 
 	//获取函数地址
-	oldZwQuerySystemInformation = SSDTcallTable[ulSSDTFunctionIndex];
+	oldNtQuerySystemInformation = SSDTcallTable[ulSSDTFunctionIndex];
 
-	if (NULL == oldZwQuerySystemInformation)
+	if (NULL == oldNtQuerySystemInformation)
 	{
 		DbgPrint("Get SSDT Function address Error!\n");
 		return STATUS_SUCCESS;
@@ -394,7 +395,7 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING regPath)
 
 	disableWP_cr0();
 	//oldZwQuerySystemInformation = hookSSDT(ulSSDTFunctionIndex, newZwQuerySystemInformation, SSDTcallTable);
-	hookSSDT(ulSSDTFunctionIndex, newZwQuerySystemInformation, SSDTcallTable);
+	hookSSDT(ulSSDTFunctionIndex, newNtQuerySystemInformation, SSDTcallTable);
 	enableWP_cr0();
 	KdBreakPoint();
 
