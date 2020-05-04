@@ -71,6 +71,6 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING regPath)
 	DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_WARNING_LEVEL, "Driver running.\n");
 	(*DriverObject).DriverUnload = Unload;
 	HideDriver(DriverObject);
-
+	KdBreakPoint();
 	return(STATUS_SUCCESS);
 }

