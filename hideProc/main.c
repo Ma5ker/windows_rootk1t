@@ -35,13 +35,13 @@ typedef NTSTATUS (*NtQuerySystemInformationPtr)(
 //ZwQuerySystemInformation()需要的两个结构体参数定义
 typedef struct _SYSTEM_PROCESS_INFO {
 	ULONG NextEntryOffset;   //下一个结构体的偏移
-	ULONG NumberOfThreads;   //进程的线程数
+	ULONG NumberOfThreads;   
 	
 	ULONG  Reserved[6];
 	LARGE_INTEGER CreatedTime;
 	LARGE_INTEGER UserTime;
 	LARGE_INTEGER KernelTime;
-	UNICODE_STRING ProcessName;
+	UNICODE_STRING ProcessName;//进程的文件名
 	KPRIORITY BasePriority;
 	HANDLE UniqueProceessId;
 	PVOID Reserved3;
@@ -376,7 +376,8 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING regPath)
 	//获取函数对应的索引
 	UNICODE_STRING ustrDllFileName;
 	RtlInitUnicodeString(&ustrDllFileName, L"\\??\\C:\\Windows\\System32\\ntdll.dll");
-	ulSSDTFunctionIndex = GetSSDTFunctionIndex(ustrDllFileName, "ZwQuerySystemInformation");
+	//ulSSDTFunctionIndex = GetSSDTFunctionIndex(ustrDllFileName, "ZwQuerySystemInformation");
+	ulSSDTFunctionIndex = GetSSDTFunctionIndex(ustrDllFileName, "NtQuerySystemInformation");
 
 	//获取函数地址
 	oldNtQuerySystemInformation = SSDTcallTable[ulSSDTFunctionIndex];
